@@ -1,0 +1,852 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Agentic Observability — The Living System</title>
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg:     #060b16;
+  --blue:   #4f8ef7;
+  --purple: #9b6ef3;
+  --green:  #34d399;
+  --orange: #fbbf24;
+  --red:    #f87171;
+  --text:   #e2e8f0;
+  --muted:  #7a8fa6;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif;
+  width: 100vw; height: 100vh; overflow: hidden;
+}
+
+/* ─── HEADER ─── */
+#hdr {
+  position: fixed; top: 0; left: 0; right: 0; height: 58px;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 32px;
+  background: rgba(6,11,22,0.92);
+  backdrop-filter: blur(24px);
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  z-index: 100;
+}
+.logo {
+  font-size: 16px; font-weight: 700;
+  background: linear-gradient(135deg, #4f8ef7, #9b6ef3);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+}
+.hdr-center {
+  font-size: 13px; color: var(--muted); font-style: italic; letter-spacing: 0.04em;
+  text-align: center;
+}
+.hdr-center strong { color: var(--text); font-style: normal; }
+
+/* ─── STATUS BADGE ─── */
+#status {
+  position: fixed; top: 72px; left: 32px;
+  display: flex; align-items: center; gap: 10px;
+  background: rgba(6,11,22,0.88);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 10px; padding: 8px 16px;
+  z-index: 100; backdrop-filter: blur(16px);
+  transition: all 0.6s ease;
+}
+#status-dot { width: 9px; height: 9px; border-radius: 50%; transition: background 0.5s ease; }
+#status-text { font-size: 13px; font-weight: 600; transition: color 0.5s ease; }
+#status-timer { font-size: 11px; color: var(--muted); font-family: 'SF Mono', monospace; }
+
+/* ─── METRICS BAR ─── */
+#metrics {
+  position: fixed; bottom: 0; left: 0; right: 0; height: 52px;
+  display: flex; align-items: center; justify-content: center; gap: 60px;
+  background: rgba(6,11,22,0.9);
+  border-top: 1px solid rgba(255,255,255,0.07);
+  z-index: 100; backdrop-filter: blur(16px);
+}
+.metric { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.metric-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.metric-val { font-size: 16px; font-weight: 700; font-family: 'SF Mono', monospace; transition: color 0.5s ease; }
+
+/* ─── INVESTIGATION PANEL ─── */
+#inv-panel {
+  position: fixed; right: -340px; top: 72px; width: 320px;
+  background: rgba(10,18,35,0.95);
+  border: 1px solid rgba(79,142,247,0.35);
+  border-radius: 14px; padding: 18px;
+  z-index: 100; backdrop-filter: blur(20px);
+  transition: right 0.7s cubic-bezier(0.34, 1.2, 0.64, 1);
+  box-shadow: -8px 0 40px rgba(79,142,247,0.1);
+}
+#inv-panel.show { right: 20px; }
+
+.inv-header {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 14px;
+}
+.inv-brain {
+  width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0;
+  background: radial-gradient(circle at 40% 40%, rgba(79,142,247,0.3), rgba(155,110,243,0.1));
+  border: 2px solid rgba(79,142,247,0.6);
+  display: flex; align-items: center; justify-content: center; font-size: 20px;
+  animation: brainPulse 2.2s ease-in-out infinite;
+}
+@keyframes brainPulse {
+  0%,100% { box-shadow: 0 0 0 0 rgba(79,142,247,0.35); }
+  50% { box-shadow: 0 0 0 10px rgba(79,142,247,0); }
+}
+.inv-title { font-size: 13px; font-weight: 700; color: var(--blue); }
+.inv-status-row { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); margin-top: 3px; }
+.inv-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); animation: dotPulse 1.3s ease-in-out infinite; }
+@keyframes dotPulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+.inv-log {
+  background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 8px; padding: 10px 12px; margin-bottom: 12px;
+  font-family: 'SF Mono', 'Fira Code', monospace; font-size: 11px;
+  min-height: 120px;
+}
+.inv-line {
+  color: var(--muted); line-height: 1.9;
+  opacity: 0; transform: translateX(-4px);
+  transition: all 0.3s ease;
+}
+.inv-line.show { opacity: 1; transform: translateX(0); }
+.inv-line.ok  { color: var(--green); font-weight: 600; }
+.inv-line.warn { color: var(--orange); }
+.inv-line.err  { color: var(--red); }
+
+.inv-finding {
+  background: rgba(248,113,113,0.08);
+  border: 1px solid rgba(248,113,113,0.35);
+  border-radius: 8px; padding: 10px 12px; margin-bottom: 10px;
+  opacity: 0; transition: opacity 0.5s ease;
+}
+.inv-finding.show { opacity: 1; }
+.inv-finding-lbl { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 5px; }
+.inv-finding-val { font-size: 12.5px; font-weight: 600; color: var(--red); }
+.inv-conf { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+.inv-action {
+  display: flex; align-items: center; gap: 8px; padding: 8px 11px;
+  border-radius: 8px; border: 1px solid rgba(52,211,153,0.35);
+  background: rgba(52,211,153,0.06); font-size: 12px; font-weight: 500;
+  opacity: 0; transform: translateY(6px); transition: all 0.4s ease;
+  margin-bottom: 7px;
+}
+.inv-action.show { opacity: 1; transform: translateY(0); }
+.inv-action-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); flex-shrink: 0; }
+.inv-action.firing {
+  border-color: rgba(52,211,153,0.7);
+  background: rgba(52,211,153,0.14);
+  animation: fireAction 1.5s ease-in-out infinite;
+}
+@keyframes fireAction { 0%,100%{box-shadow:0 0 0 0 rgba(52,211,153,0.2)} 50%{box-shadow:0 0 0 6px rgba(52,211,153,0)} }
+
+.inv-footer { font-size: 10px; color: rgba(79,142,247,0.5); font-style: italic; text-align: center; margin-top: 8px; }
+
+/* ─── RESOLUTION OVERLAY ─── */
+#resolved-banner {
+  position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%) scale(0.8);
+  text-align: center; z-index: 200; pointer-events: none;
+  opacity: 0; transition: all 0.6s cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+#resolved-banner.show { opacity: 1; transform: translate(-50%,-50%) scale(1); }
+.res-icon { font-size: 64px; margin-bottom: 12px; }
+.res-title { font-size: 36px; font-weight: 800; color: var(--green); letter-spacing: -1px; }
+.res-sub { font-size: 16px; color: var(--muted); margin-top: 10px; }
+.res-mttr { font-size: 48px; font-weight: 800; color: var(--text); margin-top: 16px; font-family: 'SF Mono', monospace; }
+.res-mttr-lbl { font-size: 13px; color: var(--muted); margin-top: 4px; }
+.res-note { font-size: 14px; color: rgba(52,211,153,0.8); margin-top: 20px; font-style: italic; }
+
+/* ─── CANVAS ─── */
+#canvas {
+  position: fixed; top: 58px; left: 0;
+  width: 100vw;
+  height: calc(100vh - 110px); /* header 58 + metrics 52 */
+  display: block;
+}
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div id="hdr">
+  <div class="logo">⬡ Agentic Observability</div>
+  <div class="hdr-center">
+    Raw telemetry is not the product. <strong>Meaning is the product.</strong>
+  </div>
+  <div style="font-size:12px;color:var(--muted);font-weight:500">Live System View</div>
+</div>
+
+<!-- Status badge -->
+<div id="status">
+  <div id="status-dot" style="background:var(--green)"></div>
+  <div id="status-text" style="color:var(--green)">All systems operational</div>
+  <div id="status-timer"></div>
+</div>
+
+<!-- Main canvas -->
+<canvas id="canvas"></canvas>
+
+<!-- Investigation panel (slides in) -->
+<div id="inv-panel">
+  <div class="inv-header">
+    <div class="inv-brain">🤖</div>
+    <div>
+      <div class="inv-title">AI Investigation Agent</div>
+      <div class="inv-status-row"><div class="inv-dot"></div>Active · No manual config required</div>
+    </div>
+  </div>
+
+  <div class="inv-log">
+    <div class="inv-line warn" id="il-0">→ Anomaly detected: postgres-primary</div>
+    <div class="inv-line"      id="il-1">→ Querying knowledge graph...</div>
+    <div class="inv-line"      id="il-2">→ checkout-svc → postgres (dependency)</div>
+    <div class="inv-line"      id="il-3">→ payment-svc → postgres (dependency)</div>
+    <div class="inv-line warn" id="il-4">→ DB pool: 100/100 connections exhausted</div>
+    <div class="inv-line"      id="il-5">→ Cascade: 2 services degraded</div>
+    <div class="inv-line ok"   id="il-6">✓ Root cause confirmed (92% confidence)</div>
+  </div>
+
+  <div class="inv-finding" id="inv-finding">
+    <div class="inv-finding-lbl">🎯 Root Cause Identified</div>
+    <div class="inv-finding-val">DB connection pool exhaustion</div>
+    <div class="inv-conf">Impact: checkout-svc, payment-svc · Confidence: 92%</div>
+  </div>
+
+  <div class="inv-action" id="inv-act0"><div class="inv-action-dot"></div>⚖ Scale DB pool: 100 → 250</div>
+  <div class="inv-action" id="inv-act1"><div class="inv-action-dot"></div>🔄 Restart affected pods</div>
+
+  <div class="inv-footer">Fully explainable · Zero human intervention</div>
+</div>
+
+<!-- Resolution banner -->
+<div id="resolved-banner">
+  <div class="res-icon">✅</div>
+  <div class="res-title">Incident Resolved</div>
+  <div class="res-sub">Root cause identified · Remediation executed autonomously</div>
+  <div class="res-mttr" id="res-mttr-val">38s</div>
+  <div class="res-mttr-lbl">Mean Time to Resolution</div>
+  <div class="res-note">No human intervention required</div>
+</div>
+
+<!-- Metrics bar -->
+<div id="metrics">
+  <div class="metric">
+    <div class="metric-label">Response Time (p99)</div>
+    <div class="metric-val" id="m-latency" style="color:var(--green)">42ms</div>
+  </div>
+  <div class="metric">
+    <div class="metric-label">Error Rate</div>
+    <div class="metric-val" id="m-errors" style="color:var(--green)">0.01%</div>
+  </div>
+  <div class="metric">
+    <div class="metric-label">DB Connections</div>
+    <div class="metric-val" id="m-db" style="color:var(--green)">34 / 100</div>
+  </div>
+  <div class="metric">
+    <div class="metric-label">Events Analyzed</div>
+    <div class="metric-val" id="m-events" style="color:var(--blue)">0</div>
+  </div>
+  <div class="metric">
+    <div class="metric-label">Active Incidents</div>
+    <div class="metric-val" id="m-incidents" style="color:var(--green)">0</div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+//  GRAPH DEFINITION
+// ═══════════════════════════════════════════════════════════
+
+const NODES = [
+  { id: 'lb',       label: 'load-balancer',   sub: 'gateway',   icon: '⚡', x: 0.50, y: 0.13 },
+  { id: 'checkout', label: 'checkout-svc',    sub: 'service',   icon: '🛒', x: 0.26, y: 0.42 },
+  { id: 'api',      label: 'api-service',     sub: 'service',   icon: '⚙',  x: 0.50, y: 0.42 },
+  { id: 'payment',  label: 'payment-svc',     sub: 'service',   icon: '💳', x: 0.74, y: 0.42 },
+  { id: 'redis',    label: 'redis',           sub: 'cache',     icon: '⚡', x: 0.18, y: 0.73 },
+  { id: 'postgres', label: 'postgres-primary',sub: 'database',  icon: '🗄', x: 0.42, y: 0.76 },
+  { id: 'kafka',    label: 'kafka',           sub: 'broker',    icon: '📨', x: 0.62, y: 0.73 },
+  { id: 'extapi',   label: 'external-api',    sub: 'external',  icon: '🌐', x: 0.82, y: 0.73 },
+];
+
+const EDGES = [
+  { from: 'lb',       to: 'checkout' },
+  { from: 'lb',       to: 'api'      },
+  { from: 'lb',       to: 'payment'  },
+  { from: 'checkout', to: 'redis'    },
+  { from: 'checkout', to: 'postgres' },
+  { from: 'api',      to: 'redis'    },
+  { from: 'api',      to: 'kafka'    },
+  { from: 'payment',  to: 'postgres' },
+  { from: 'payment',  to: 'extapi'   },
+];
+
+const nodeMap = {};
+NODES.forEach(n => nodeMap[n.id] = n);
+
+// ═══════════════════════════════════════════════════════════
+//  TIMELINE  (seconds within one loop)
+// ═══════════════════════════════════════════════════════════
+
+const LOOP = 30; // total loop duration seconds
+
+const TIMELINE = [
+  { at: 0,    state: 'healthy'       },
+  { at: 6,    state: 'degrading'     },
+  { at: 10,   state: 'incident'      },
+  { at: 13,   state: 'investigating' },
+  { at: 19,   state: 'identified'    },
+  { at: 21,   state: 'remediating'   },
+  { at: 24,   state: 'resolved'      },
+  { at: 28,   state: 'healthy'       },
+];
+
+// Health colors: green | yellow | orange | red
+const HEALTH_MAP = {
+  healthy:       { lb:'green',  checkout:'green',  api:'green', payment:'green',  redis:'green',  postgres:'green',  kafka:'green', extapi:'green'  },
+  degrading:     { lb:'green',  checkout:'green',  api:'green', payment:'green',  redis:'green',  postgres:'yellow', kafka:'green', extapi:'green'  },
+  incident:      { lb:'yellow', checkout:'red',    api:'green', payment:'red',    redis:'green',  postgres:'red',    kafka:'green', extapi:'green'  },
+  investigating: { lb:'yellow', checkout:'red',    api:'green', payment:'red',    redis:'green',  postgres:'red',    kafka:'green', extapi:'green'  },
+  identified:    { lb:'yellow', checkout:'orange', api:'green', payment:'orange', redis:'green',  postgres:'red',    kafka:'green', extapi:'green'  },
+  remediating:   { lb:'yellow', checkout:'yellow', api:'green', payment:'yellow', redis:'green',  postgres:'yellow', kafka:'green', extapi:'green'  },
+  resolved:      { lb:'green',  checkout:'green',  api:'green', payment:'green',  redis:'green',  postgres:'green',  kafka:'green', extapi:'green'  },
+};
+
+const HEALTH_COLORS = {
+  green:  { fill: 'rgba(52,211,153,0.08)',  border: 'rgba(52,211,153,0.7)',  glow: 'rgba(52,211,153,0.35)',  text: '#34d399' },
+  yellow: { fill: 'rgba(251,191,36,0.08)',  border: 'rgba(251,191,36,0.7)',  glow: 'rgba(251,191,36,0.35)',  text: '#fbbf24' },
+  orange: { fill: 'rgba(251,146,60,0.08)',  border: 'rgba(251,146,60,0.7)',  glow: 'rgba(251,146,60,0.3)',   text: '#fb923c' },
+  red:    { fill: 'rgba(248,113,113,0.1)',  border: 'rgba(248,113,113,0.8)', glow: 'rgba(248,113,113,0.45)', text: '#f87171' },
+};
+
+// Edge health (drives particle color & speed)
+function edgeHealth(fromId, toId, state) {
+  const fh = HEALTH_MAP[state]?.[fromId] || 'green';
+  const th = HEALTH_MAP[state]?.[toId]   || 'green';
+  if (fh === 'red'    || th === 'red')    return 'red';
+  if (fh === 'orange' || th === 'orange') return 'orange';
+  if (fh === 'yellow' || th === 'yellow') return 'yellow';
+  return 'green';
+}
+
+// ═══════════════════════════════════════════════════════════
+//  CANVAS SETUP
+// ═══════════════════════════════════════════════════════════
+
+const canvas = document.getElementById('canvas');
+const ctx    = canvas.getContext('2d');
+let W, H;
+
+function resize() {
+  const dpr = window.devicePixelRatio || 1;
+  W = window.innerWidth;
+  H = window.innerHeight - 58 - 52; // minus header + metrics bar
+  canvas.width  = Math.round(W * dpr);
+  canvas.height = Math.round(H * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0); // reset scale each time (no accumulation)
+}
+resize();
+window.addEventListener('resize', resize);
+
+// Node dimensions
+const NW = 168, NH = 64;
+
+function nodeX(n) { return n.x * W; }
+function nodeY(n) { return n.y * H; }
+
+// ═══════════════════════════════════════════════════════════
+//  PARTICLES
+// ═══════════════════════════════════════════════════════════
+
+// Each edge has a list of particles traveling along it
+const edgeParticles = {};
+EDGES.forEach(e => { edgeParticles[e.from + '-' + e.to] = []; });
+
+function spawnEdgeParticle(edge, state) {
+  const key = edge.from + '-' + edge.to;
+  if (edgeParticles[key].length > 4) return;
+  const health = edgeHealth(edge.from, edge.to, state);
+  const cols = { green: '#34d399', yellow: '#fbbf24', orange: '#fb923c', red: '#f87171' };
+  edgeParticles[key].push({
+    t: 0,
+    speed: (state === 'incident' || state === 'investigating') && (edge.to === 'postgres' || edge.from === 'postgres') ? 0.005 : 0.008 + Math.random()*0.006,
+    r: 2.5 + Math.random(),
+    color: cols[health],
+    alpha: 0.7 + Math.random()*0.3,
+  });
+}
+
+function updateParticles(state) {
+  EDGES.forEach(edge => {
+    const key = edge.from + '-' + edge.to;
+    const ps  = edgeParticles[key];
+    for (let i = ps.length - 1; i >= 0; i--) {
+      ps[i].t += ps[i].speed;
+      if (ps[i].t >= 1) ps.splice(i, 1);
+    }
+    // Spawn with rate dependent on state
+    const health = edgeHealth(edge.from, edge.to, state);
+    const spawnChance = health === 'red' ? 0.04 : health === 'yellow' ? 0.06 : 0.09;
+    if (Math.random() < spawnChance) spawnEdgeParticle(edge, state);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+//  AI SCANNER  (circle that sweeps the graph during investigation)
+// ═══════════════════════════════════════════════════════════
+
+let scanner = { active: false, x: 0, y: 0, r: 0, alpha: 0 };
+let scannerTargets = []; // node ids to visit
+let scannerIdx = 0;
+let scannerT   = 0;
+
+function startScanner() {
+  scannerTargets = ['lb','checkout','api','payment','redis','postgres'];
+  scannerIdx = 0;
+  scannerT   = 0;
+  scanner.active = true;
+  const first = nodeMap[scannerTargets[0]];
+  scanner.x = nodeX(first); scanner.y = nodeY(first); scanner.r = 80; scanner.alpha = 0;
+}
+
+function updateScanner(dt) {
+  if (!scanner.active) return;
+  scannerT += dt * 0.6; // speed
+  if (scannerT >= 1) {
+    scannerT = 0;
+    scannerIdx++;
+    if (scannerIdx >= scannerTargets.length) {
+      scanner.active = false; return;
+    }
+  }
+  const curr = nodeMap[scannerTargets[Math.min(scannerIdx, scannerTargets.length-1)]];
+  const next = nodeMap[scannerTargets[Math.min(scannerIdx+1, scannerTargets.length-1)]];
+  scanner.x = lerp(nodeX(curr), nodeX(next), ease(scannerT));
+  scanner.y = lerp(nodeY(curr), nodeY(next), ease(scannerT));
+  scanner.alpha = 0.7;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  DRAWING
+// ═══════════════════════════════════════════════════════════
+
+function lerp(a, b, t) { return a + (b - a) * t; }
+function ease(t) { return t < 0.5 ? 2*t*t : -1+(4-2*t)*t; }
+function lerpColor(ca, cb, t) {
+  // ca, cb: [r,g,b]
+  return [lerp(ca[0],cb[0],t), lerp(ca[1],cb[1],t), lerp(ca[2],cb[2],t)];
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x+r, y);
+  ctx.lineTo(x+w-r, y); ctx.quadraticCurveTo(x+w, y, x+w, y+r);
+  ctx.lineTo(x+w, y+h-r); ctx.quadraticCurveTo(x+w, y+h, x+w-r, y+h);
+  ctx.lineTo(x+r, y+h); ctx.quadraticCurveTo(x, y+h, x, y+h-r);
+  ctx.lineTo(x, y+r); ctx.quadraticCurveTo(x, y, x+r, y);
+  ctx.closePath();
+}
+
+function drawGrid() {
+  ctx.strokeStyle = 'rgba(79,142,247,0.022)';
+  ctx.lineWidth = 1;
+  const gs = 64;
+  for (let x = 0; x < W; x += gs) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
+  for (let y = 0; y < H; y += gs) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+}
+
+function drawEdgeLine(edge, state) {
+  const fn = nodeMap[edge.from], tn = nodeMap[edge.to];
+  const fx = nodeX(fn), fy = nodeY(fn) + NH*0.35;
+  const tx = nodeX(tn), ty = nodeY(tn) - NH*0.35;
+  const mx = (fx+tx)/2, my = (fy+ty)/2 - 24;
+
+  const health = edgeHealth(edge.from, edge.to, state);
+  const ecols  = { green:'rgba(52,211,153,0.18)', yellow:'rgba(251,191,36,0.2)', orange:'rgba(251,146,60,0.22)', red:'rgba(248,113,113,0.25)' };
+
+  ctx.beginPath();
+  ctx.moveTo(fx, fy);
+  ctx.quadraticCurveTo(mx, my, tx, ty);
+  ctx.strokeStyle = ecols[health];
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+}
+
+function drawParticlesOnEdge(edge) {
+  const fn = nodeMap[edge.from], tn = nodeMap[edge.to];
+  const fx = nodeX(fn), fy = nodeY(fn) + NH*0.35;
+  const tx = nodeX(tn), ty = nodeY(tn) - NH*0.35;
+  const mx = (fx+tx)/2, my = (fy+ty)/2 - 24;
+
+  const key = edge.from + '-' + edge.to;
+  edgeParticles[key].forEach(p => {
+    const t = p.t;
+    const bx = (1-t)*(1-t)*fx + 2*(1-t)*t*mx + t*t*tx;
+    const by = (1-t)*(1-t)*fy + 2*(1-t)*t*my + t*t*ty;
+    ctx.beginPath();
+    ctx.arc(bx, by, p.r, 0, Math.PI*2);
+    ctx.fillStyle = p.color;
+    ctx.globalAlpha = p.alpha * (1 - Math.abs(t - 0.5)*0.5);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  });
+}
+
+function drawNode(node, state, stateT, isRootCause) {
+  const x = nodeX(node), y = nodeY(node);
+  const healthId = HEALTH_MAP[state]?.[node.id] || 'green';
+  const health   = HEALTH_COLORS[healthId];
+  const nx = x - NW/2, ny = y - NH/2;
+
+  // Glow
+  ctx.shadowColor = health.glow;
+  ctx.shadowBlur  = healthId === 'red' ? 28 : healthId === 'green' ? 12 : 20;
+
+  // Root cause extra ring
+  if (isRootCause && (state === 'identified' || state === 'remediating')) {
+    ctx.beginPath();
+    roundRect(ctx, nx - 6, ny - 6, NW + 12, NH + 12, 18);
+    ctx.strokeStyle = 'rgba(248,113,113,0.5)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(248,113,113,0.2)';
+    ctx.lineWidth = 8;
+    ctx.stroke();
+  }
+
+  // Background
+  ctx.fillStyle = health.fill;
+  roundRect(ctx, nx, ny, NW, NH, 13);
+  ctx.fill();
+
+  // Border
+  ctx.strokeStyle = health.border;
+  ctx.lineWidth = 1.5;
+  roundRect(ctx, nx, ny, NW, NH, 13);
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  // Content
+  ctx.textAlign = 'center';
+  // Icon
+  ctx.font = '14px system-ui';
+  ctx.fillStyle = health.text;
+  ctx.fillText(node.icon, x, y - 14);
+  // Label
+  ctx.font = 'bold 13px -apple-system,system-ui,sans-serif';
+  ctx.fillStyle = health.text;
+  ctx.fillText(node.label, x, y + 2);
+  // Sub
+  ctx.font = '10px -apple-system,system-ui,sans-serif';
+  ctx.fillStyle = 'rgba(122,143,166,0.8)';
+  ctx.fillText(node.sub, x, y + 18);
+
+  // Root cause label
+  if (isRootCause && state === 'identified') {
+    ctx.font = 'bold 10px -apple-system,system-ui,sans-serif';
+    ctx.fillStyle = '#f87171';
+    ctx.fillText('▲ ROOT CAUSE', x, ny - 14);
+  }
+}
+
+function drawScanner() {
+  if (!scanner.active || scanner.alpha <= 0) return;
+  const grad = ctx.createRadialGradient(scanner.x, scanner.y, 0, scanner.x, scanner.y, scanner.r);
+  grad.addColorStop(0,   `rgba(79,142,247,${scanner.alpha * 0.12})`);
+  grad.addColorStop(0.6, `rgba(79,142,247,${scanner.alpha * 0.05})`);
+  grad.addColorStop(1,   'rgba(79,142,247,0)');
+  ctx.beginPath();
+  ctx.arc(scanner.x, scanner.y, scanner.r, 0, Math.PI*2);
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.arc(scanner.x, scanner.y, scanner.r, 0, Math.PI*2);
+  ctx.strokeStyle = `rgba(79,142,247,${scanner.alpha * 0.4})`;
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  STATE MACHINE
+// ═══════════════════════════════════════════════════════════
+
+let loopStart = performance.now();
+let currentState = 'healthy';
+let stateT = 0; // progress within state (0-1)
+
+// Sidebar log line reveal tracking
+let logRevealed = 0;
+
+function getStateAt(elapsed) {
+  let state = TIMELINE[0].state;
+  for (const entry of TIMELINE) {
+    if (elapsed >= entry.at) state = entry.state;
+    else break;
+  }
+  return state;
+}
+
+function getStateProgress(elapsed) {
+  let start = 0, end = LOOP;
+  for (let i = 0; i < TIMELINE.length; i++) {
+    if (elapsed >= TIMELINE[i].at) {
+      start = TIMELINE[i].at;
+      end   = TIMELINE[i+1]?.at ?? LOOP;
+    } else break;
+  }
+  return Math.max(0, Math.min(1, (elapsed - start) / (end - start)));
+}
+
+// ─── UI update callbacks ───────────────────────
+
+function updateStatus(state) {
+  const configs = {
+    healthy:       { dot: '#34d399', text: '✓ All systems operational', col: '#34d399' },
+    degrading:     { dot: '#fbbf24', text: '⚠ Anomaly detected',         col: '#fbbf24' },
+    incident:      { dot: '#f87171', text: '🔴 Incident: Service degradation', col: '#f87171' },
+    investigating: { dot: '#4f8ef7', text: '🤖 AI investigating...',       col: '#4f8ef7' },
+    identified:    { dot: '#9b6ef3', text: '🎯 Root cause identified',     col: '#9b6ef3' },
+    remediating:   { dot: '#4f8ef7', text: '⚡ Remediating autonomously',  col: '#4f8ef7' },
+    resolved:      { dot: '#34d399', text: '✓ Incident resolved',          col: '#34d399' },
+  };
+  const c = configs[state] || configs.healthy;
+  document.getElementById('status-dot').style.background = c.dot;
+  document.getElementById('status-text').style.color = c.col;
+  document.getElementById('status-text').textContent = c.text;
+}
+
+function updateMetrics(state, t, elapsed) {
+  const latEl   = document.getElementById('m-latency');
+  const errEl   = document.getElementById('m-errors');
+  const dbEl    = document.getElementById('m-db');
+  const evtEl   = document.getElementById('m-events');
+  const incEl   = document.getElementById('m-incidents');
+
+  switch(state) {
+    case 'healthy':
+      latEl.textContent = '42ms';      latEl.style.color = 'var(--green)';
+      errEl.textContent = '0.01%';     errEl.style.color = 'var(--green)';
+      dbEl.textContent  = '34 / 100';  dbEl.style.color  = 'var(--green)';
+      evtEl.textContent = '0';
+      incEl.textContent = '0';         incEl.style.color = 'var(--green)';
+      break;
+    case 'degrading':
+      latEl.textContent = `${Math.round(lerp(42, 320, t))}ms`;   latEl.style.color = 'var(--orange)';
+      errEl.textContent = `${(lerp(0.01, 2.4, t)).toFixed(2)}%`; errEl.style.color = 'var(--orange)';
+      dbEl.textContent  = `${Math.round(lerp(34, 100, t))} / 100`; dbEl.style.color = 'var(--orange)';
+      evtEl.textContent = Math.round(lerp(0, 4, t));
+      incEl.textContent = '0';         incEl.style.color = 'var(--green)';
+      break;
+    case 'incident':
+      latEl.textContent = `${Math.round(lerp(320, 2800, t))}ms`;  latEl.style.color = 'var(--red)';
+      errEl.textContent = `${(lerp(2.4, 34.1, t)).toFixed(1)}%`;  errEl.style.color = 'var(--red)';
+      dbEl.textContent  = '100 / 100';                              dbEl.style.color  = 'var(--red)';
+      evtEl.textContent = Math.round(lerp(4, 12, t));
+      incEl.textContent = '1';         incEl.style.color = 'var(--red)';
+      break;
+    case 'investigating':
+      latEl.textContent = `${Math.round(lerp(2800, 2900, t))}ms`; latEl.style.color = 'var(--red)';
+      errEl.textContent = `${(lerp(34.1, 34.8, t)).toFixed(1)}%`; errEl.style.color = 'var(--red)';
+      dbEl.textContent  = '100 / 100';                              dbEl.style.color  = 'var(--red)';
+      evtEl.textContent = Math.round(lerp(12, 28, t));
+      incEl.textContent = '1';         incEl.style.color = 'var(--red)';
+      break;
+    case 'identified':
+      latEl.textContent = '2900ms';    latEl.style.color = 'var(--red)';
+      errEl.textContent = '35.2%';     errEl.style.color = 'var(--red)';
+      dbEl.textContent  = '100 / 100'; dbEl.style.color  = 'var(--red)';
+      evtEl.textContent = '31';
+      incEl.textContent = '1';         incEl.style.color = 'var(--red)';
+      break;
+    case 'remediating':
+      latEl.textContent = `${Math.round(lerp(2900, 180, t))}ms`;  latEl.style.color = t > 0.5 ? 'var(--orange)' : 'var(--red)';
+      errEl.textContent = `${(lerp(35.2, 1.2, t)).toFixed(1)}%`;  errEl.style.color = t > 0.5 ? 'var(--orange)' : 'var(--red)';
+      dbEl.textContent  = `${Math.round(lerp(100, 250, t))} / 250`; dbEl.style.color = t > 0.5 ? 'var(--green)' : 'var(--orange)';
+      evtEl.textContent = '34';
+      incEl.textContent = t > 0.7 ? '0' : '1'; incEl.style.color = t > 0.7 ? 'var(--green)' : 'var(--orange)';
+      break;
+    case 'resolved':
+      latEl.textContent = '38ms';      latEl.style.color = 'var(--green)';
+      errEl.textContent = '0.02%';     errEl.style.color = 'var(--green)';
+      dbEl.textContent  = '58 / 250';  dbEl.style.color  = 'var(--green)';
+      evtEl.textContent = '36';
+      incEl.textContent = '0';         incEl.style.color = 'var(--green)';
+      break;
+  }
+}
+
+// Investigation panel control
+let panelState = 'hidden';
+
+function showPanel() {
+  document.getElementById('inv-panel').classList.add('show');
+}
+function hidePanel() {
+  document.getElementById('inv-panel').classList.remove('show');
+  // Reset
+  document.querySelectorAll('.inv-line').forEach(el => el.classList.remove('show'));
+  document.getElementById('inv-finding').classList.remove('show');
+  document.getElementById('inv-act0').classList.remove('show','firing');
+  document.getElementById('inv-act1').classList.remove('show','firing');
+  logRevealed = 0;
+}
+
+function revealLogLine(idx, delay = 0) {
+  setTimeout(() => {
+    const el = document.getElementById('il-' + idx);
+    if (el) el.classList.add('show');
+  }, delay);
+}
+
+// Resolution banner
+let resBannerShown = false;
+function showResolution() {
+  if (resBannerShown) return;
+  resBannerShown = true;
+  document.getElementById('resolved-banner').classList.add('show');
+  setTimeout(() => {
+    document.getElementById('resolved-banner').classList.remove('show');
+    resBannerShown = false;
+  }, 4200);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  STATE TRANSITION SIDE EFFECTS
+// ═══════════════════════════════════════════════════════════
+
+let prevState = '';
+let scannerStarted = false;
+let panelOpened    = false;
+let findingShown   = false;
+let act0Shown      = false;
+let act1Shown      = false;
+let logTimers      = [];
+
+function clearLogTimers() { logTimers.forEach(clearTimeout); logTimers = []; }
+
+function onEnterState(state) {
+  clearLogTimers();
+
+  if (state === 'healthy') {
+    hidePanel();
+    panelOpened    = false;
+    scannerStarted = false;
+    findingShown   = false;
+    act0Shown      = false;
+    act1Shown      = false;
+    document.getElementById('status-timer').textContent = '';
+  }
+
+  if (state === 'incident') {
+    // small timer
+    document.getElementById('status-timer').textContent = '';
+    document.getElementById('m-incidents').textContent = '1';
+  }
+
+  if (state === 'investigating') {
+    showPanel();
+    panelOpened = true;
+    startScanner();
+    scannerStarted = true;
+    // Reveal log lines sequentially
+    const delays = [200, 900, 1600, 2200, 2900, 3600, 4400];
+    delays.forEach((d, i) => {
+      logTimers.push(setTimeout(() => revealLogLine(i), d));
+    });
+  }
+
+  if (state === 'identified') {
+    setTimeout(() => {
+      document.getElementById('inv-finding').classList.add('show');
+      findingShown = true;
+    }, 400);
+  }
+
+  if (state === 'remediating') {
+    setTimeout(() => {
+      const a0 = document.getElementById('inv-act0');
+      a0.classList.add('show');
+      act0Shown = true;
+      setTimeout(() => a0.classList.add('firing'), 600);
+    }, 300);
+    setTimeout(() => {
+      const a1 = document.getElementById('inv-act1');
+      a1.classList.add('show');
+      act1Shown = true;
+      setTimeout(() => a1.classList.add('firing'), 400);
+    }, 900);
+  }
+
+  if (state === 'resolved') {
+    // Stop firing animations
+    document.getElementById('inv-act0').classList.remove('firing');
+    document.getElementById('inv-act1').classList.remove('firing');
+    showResolution();
+    setTimeout(() => { hidePanel(); }, 3000);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  MAIN LOOP
+// ═══════════════════════════════════════════════════════════
+
+let lastTime = performance.now();
+
+function frame(now) {
+  const dt = Math.min((now - lastTime) / 1000, 0.05); // seconds, capped
+  lastTime = now;
+
+  // Time within loop
+  const elapsed = ((now - loopStart) / 1000) % LOOP;
+
+  // Determine state
+  const state = getStateAt(elapsed);
+  const stT   = getStateProgress(elapsed);
+
+  // State transition
+  if (state !== prevState) {
+    onEnterState(state);
+    prevState = state;
+  }
+
+  // Update systems
+  updateParticles(state);
+  updateScanner(dt);
+  updateStatus(state);
+  updateMetrics(state, stT, elapsed);
+
+  // Timer display during incident
+  if (['incident','investigating','identified','remediating'].includes(state)) {
+    const incidentStart = TIMELINE.find(t => t.state === 'incident')?.at ?? 10;
+    const secs = Math.floor(elapsed - incidentStart);
+    if (secs >= 0) document.getElementById('status-timer').textContent = `+${secs}s`;
+  }
+
+  // ─── Draw ───────────────────────────────────────
+  ctx.clearRect(0, 0, W, H);
+
+  // Grid
+  drawGrid();
+
+  // Edges (lines first, particles on top)
+  EDGES.forEach(e => drawEdgeLine(e, state));
+  EDGES.forEach(e => drawParticlesOnEdge(e));
+
+  // AI scanner
+  drawScanner();
+
+  // Nodes
+  NODES.forEach(n => drawNode(n, state, stT, n.id === 'postgres'));
+
+  requestAnimationFrame(frame);
+}
+
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
