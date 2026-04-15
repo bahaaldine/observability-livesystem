@@ -368,15 +368,15 @@ EDGES.forEach(e => { edgeParticles[e.from + '-' + e.to] = []; });
 
 function spawnEdgeParticle(edge, state) {
   const key = edge.from + '-' + edge.to;
-  if (edgeParticles[key].length > 4) return;
+  if (edgeParticles[key].length > 1) return; // max 1 particle per edge at a time
   const health = edgeHealth(edge.from, edge.to, state);
   const cols = { green: '#34d399', yellow: '#fbbf24', orange: '#fb923c', red: '#f87171' };
   edgeParticles[key].push({
     t: 0,
-    speed: (state === 'incident' || state === 'investigating') && (edge.to === 'postgres' || edge.from === 'postgres') ? 0.005 : 0.008 + Math.random()*0.006,
-    r: 2.5 + Math.random(),
+    speed: 0.003 + Math.random() * 0.002, // much slower
+    r: 2,
     color: cols[health],
-    alpha: 0.7 + Math.random()*0.3,
+    alpha: 0.75,
   });
 }
 
@@ -388,9 +388,9 @@ function updateParticles(state) {
       ps[i].t += ps[i].speed;
       if (ps[i].t >= 1) ps.splice(i, 1);
     }
-    // Spawn with rate dependent on state
+    // Low spawn rate — one particle every ~2-4 seconds per edge
     const health = edgeHealth(edge.from, edge.to, state);
-    const spawnChance = health === 'red' ? 0.04 : health === 'yellow' ? 0.06 : 0.09;
+    const spawnChance = health === 'red' ? 0.008 : 0.012;
     if (Math.random() < spawnChance) spawnEdgeParticle(edge, state);
   });
 }
@@ -459,38 +459,50 @@ function drawGrid() {
   for (let y = 0; y < H; y += gs) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
 }
 
-function drawEdgeLine(edge, state) {
-  const fn = nodeMap[edge.from], tn = nodeMap[edge.to];
-  const fx = nodeX(fn), fy = nodeY(fn) + NH*0.35;
-  const tx = nodeX(tn), ty = nodeY(tn) - NH*0.35;
-  const mx = (fx+tx)/2, my = (fy+ty)/2 - 24;
+// Edge connection points: bottom-center of source, top-center of target
+// Use NH/2 + gap so paths start/end just outside the node border
+const EDGE_GAP = 6;
+function edgeSrc(n) { return { x: nodeX(n), y: nodeY(n) + NH/2 + EDGE_GAP }; }
+function edgeDst(n) { return { x: nodeX(n), y: nodeY(n) - NH/2 - EDGE_GAP }; }
 
+function edgePoints(edge) {
+  const fn = nodeMap[edge.from], tn = nodeMap[edge.to];
+  const src = edgeSrc(fn), dst = edgeDst(tn);
+  const mx = (src.x + dst.x) / 2;
+  const my = (src.y + dst.y) / 2 - 20;
+  return { fx: src.x, fy: src.y, tx: dst.x, ty: dst.y, mx, my };
+}
+
+function drawEdgeLine(edge, state) {
+  const { fx, fy, tx, ty, mx, my } = edgePoints(edge);
   const health = edgeHealth(edge.from, edge.to, state);
-  const ecols  = { green:'rgba(52,211,153,0.18)', yellow:'rgba(251,191,36,0.2)', orange:'rgba(251,146,60,0.22)', red:'rgba(248,113,113,0.25)' };
+  const ecols = { green:'rgba(52,211,153,0.14)', yellow:'rgba(251,191,36,0.18)', orange:'rgba(251,146,60,0.2)', red:'rgba(248,113,113,0.22)' };
 
   ctx.beginPath();
   ctx.moveTo(fx, fy);
   ctx.quadraticCurveTo(mx, my, tx, ty);
   ctx.strokeStyle = ecols[health];
-  ctx.lineWidth = 1.5;
+  ctx.lineWidth = 1;
   ctx.stroke();
 }
 
 function drawParticlesOnEdge(edge) {
-  const fn = nodeMap[edge.from], tn = nodeMap[edge.to];
-  const fx = nodeX(fn), fy = nodeY(fn) + NH*0.35;
-  const tx = nodeX(tn), ty = nodeY(tn) - NH*0.35;
-  const mx = (fx+tx)/2, my = (fy+ty)/2 - 24;
-
+  const { fx, fy, tx, ty, mx, my } = edgePoints(edge);
   const key = edge.from + '-' + edge.to;
+
   edgeParticles[key].forEach(p => {
     const t = p.t;
+    // Fade in at start and out at end so particles never appear inside nodes
+    const fade = Math.min(t / 0.12, 1) * Math.min((1 - t) / 0.12, 1);
+    if (fade <= 0) return;
+
     const bx = (1-t)*(1-t)*fx + 2*(1-t)*t*mx + t*t*tx;
     const by = (1-t)*(1-t)*fy + 2*(1-t)*t*my + t*t*ty;
+
     ctx.beginPath();
     ctx.arc(bx, by, p.r, 0, Math.PI*2);
     ctx.fillStyle = p.color;
-    ctx.globalAlpha = p.alpha * (1 - Math.abs(t - 0.5)*0.5);
+    ctx.globalAlpha = p.alpha * fade;
     ctx.fill();
     ctx.globalAlpha = 1;
   });
